@@ -5,28 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>刷题</title>
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont;
-  padding: 20px;
-  background: #f7f7f7;
-}
-.card {
-  background: #fff;
-  padding: 20px;
-  border-radius: 10px;
-}
-.option {
-  padding: 12px;
-  margin: 10px 0;
-  background: #eee;
-  border-radius: 8px;
-}
+body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; background: #f7f7f7; }
+.card { background: #fff; padding: 20px; border-radius: 10px; }
+.option { padding: 12px; margin: 10px 0; background: #eee; border-radius: 8px; cursor: pointer; }
 .option.correct { background: #c8f7c5; }
 .option.wrong { background: #f7c5c5; }
-button {
-  margin-top: 15px;
-  padding: 10px 15px;
-}
+button { margin-top: 15px; padding: 10px 15px; }
 </style>
 </head>
 <body>
@@ -39,24 +23,27 @@ button {
 </div>
 
 <script>
-const questions = [
-  {
-    q: "间隔增长率公式是？",
-    options: ["r1+r2", "r1×r2", "r1+r2+r1×r2", "r1−r2"],
-    answer: 2,
-    analysis: "隔年增长率 = r1 + r2 + r1×r2"
-  },
-  {
-    q: "HTTP 100-Continue 的作用是？",
-    options: ["状态码错误", "请求预处理", "先确认再传实体", "重定向"],
-    answer: 2,
-    analysis: "用于客户端确认服务端是否接收请求体"
-  }
-];
-
+let questions = [];
 let index = 0;
 
+// 简单解析 CSV
+function parseCSV(text) {
+  return text.trim().split('\n').slice(1).map(line => {
+    const [q, o1, o2, o3, o4, answer, analysis] = line.split(',');
+    return { q, options: [o1,o2,o3,o4], answer: Number(answer), analysis };
+  });
+}
+
+// 加载 CSV
+fetch('questions.csv')
+  .then(res => res.text())
+  .then(text => {
+    questions = parseCSV(text);
+    render();
+  });
+
 function render() {
+  if (!questions.length) return;
   const q = questions[index];
   document.getElementById("question").innerText = q.q;
   const box = document.getElementById("options");
@@ -77,9 +64,8 @@ function check(div, i) {
   const options = document.querySelectorAll(".option");
   options.forEach(o => o.onclick = null);
 
-  if (i === q.answer) {
-    div.classList.add("correct");
-  } else {
+  if (i === q.answer) div.classList.add("correct");
+  else {
     div.classList.add("wrong");
     options[q.answer].classList.add("correct");
   }
@@ -93,8 +79,6 @@ function next() {
   index = (index + 1) % questions.length;
   render();
 }
-
-render();
 </script>
 </body>
 </html>
