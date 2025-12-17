@@ -25,24 +25,20 @@ select { margin-bottom:12px; padding:6px; border-radius:6px; }
 </style>
 </head>
 <body>
-
 <div class="card">
   <select id="moduleSelect">
     <option value="">请选择题库模块</option>
   </select>
-
   <div class="header" id="meta"></div>
   <div class="progress" id="progress"></div>
   <div class="question" id="question"></div>
   <div id="options"></div>
   <div class="analysis" id="analysis"></div>
-
   <div class="footer">
     <button class="wrongonly" onclick="toggleWrong()">只刷错题</button>
     <button class="reset" onclick="resetProgress()">重置</button>
     <button class="next" onclick="next()">下一题</button>
   </div>
-
   <div class="stats" id="stats"></div>
 </div>
 
@@ -68,6 +64,9 @@ fetch('modules.json')
     });
     if(currentModuleFile) select.value = currentModuleFile;
     if(currentModuleFile) loadModule(currentModuleFile);
+
+    // 模块选择切换
+    select.onchange = (e) => loadModule(e.target.value);
   });
 
 // 加载模块 CSV
@@ -79,27 +78,63 @@ function loadModule(file) {
     .then(res => res.text())
     .then(text => {
       questions = parseCSV(text);
-      index=0; wrongSet.clear(); correctCount=0; totalAnswered=0;
+      index = 0;
+      wrongSet.clear();
+      correctCount = 0;
+      totalAnswered = 0;
       save();
       render();
     });
 }
 
-// CSV 解析
+// 健壮的 CSV 解析函数（支持双引号、字段内逗号、"" 转义、去 BOM）
 function parseCSV(text) {
-  const lines = text.trim().split('\n').slice(1);
-  return lines.map(line => {
-    const arr = line.split(',');
-    return {
+  text = text.replace(/^\uFEFF/, ''); // 去掉 BOM
+  const lines = text.trim().split(/\r?\n/);
+  const rows = [];
+
+  function parseLine(line) {
+    const fields = [];
+    let field = '';
+    let inQuotes = false;
+    let i = 0;
+    while (i < line.length) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+          field += '"'; // 转义的双引号
+          i += 2;
+          continue;
+        }
+        inQuotes = !inQuotes; // 切换引号状态
+        i++;
+      } else if (char === ',' && !inQuotes) {
+        fields.push(field.trim());
+        field = '';
+        i++;
+      } else {
+        field += char;
+        i++;
+      }
+    }
+    fields.push(field.trim()); // 最后一个字段
+    return fields;
+  }
+
+  for (let i = 1; i < lines.length; i++) { // 跳过标题行
+    const arr = parseLine(lines[i]);
+    if (arr.length < 10) continue; // 少于10列忽略
+    rows.push({
       module: arr[0],
       sub: arr[1],
       diff: arr[2],
       q: arr[3],
-      opts: arr.slice(4,8),
+      opts: arr.slice(4, 8),
       answer: arr[8],
       analysis: arr[9]
-    };
-  });
+    });
+  }
+  return rows;
 }
 
 function currentList() {
@@ -108,53 +143,87 @@ function currentList() {
 
 function render() {
   const list = currentList();
-  if(list.length===0){
+  if (list.length === 0) {
     document.getElementById("question").innerText = "暂无题目";
+    document.getElementById("options").innerHTML = "";
+    document.getElementById("progress").innerText = "";
+    document.getElementById("meta").innerText = "";
     return;
   }
   index = index % list.length;
   const q = list[index];
-
   document.getElementById("meta").innerText = `${q.module} / ${q.sub} / ${q.diff}`;
-  document.getElementById("progress").innerText = `第 ${index+1} 题 / 共 ${list.length} 题`;
+  document.getElementById("progress").innerText = `第 ${index + 1} 题 / 共 ${list.length} 题`;
   document.getElementById("question").innerText = q.q;
-  document.getElementById("analysis").style.display="none";
+  document.getElementById("analysis").style.display = "none";
 
   const box = document.getElementById("options");
   box.innerHTML = "";
-  q.opts.forEach((opt,i)=>{
+  q.opts.forEach((opt, i) => {
     const div = document.createElement("div");
-    div.className="option";
-    div.innerText=opt;
-    div.onclick = ()=>check(div,i,q.answer);
+    div.className = "option";
+    div.innerText = opt;
+    div.onclick = () => check(div, i, q.answer);
     box.appendChild(div);
   });
 
   document.getElementById("stats").innerText =
-    `已答：${totalAnswered}，正确：${correctCount}，正确率：${totalAnswered?Math.round(correctCount/totalAnswered*100):0}%`;
+    `已答：${totalAnswered}，正确：${correctCount}，正确率：${totalAnswered ? Math.round(correctCount / totalAnswered * 100) : 0}%`;
 }
 
-function check(div,i,ans){
-  const options=document.querySelectorAll(".option");
-  options.forEach(o=>o.onclick=null);
-  const correctIndex=ans.charCodeAt(0)-65;
+// 改进的答案检查函数（支持 A/B/C/D 或 0/1/2/3）
+function check(div, i, ans) {
+  const options = document.querySelectorAll(".option");
+  options.forEach(o => o.onclick = null);
   totalAnswered++;
-  if(i===correctIndex){ div.classList.add("correct"); correctCount++; wrongSet.delete(index); }
-  else { div.classList.add("wrong"); options[correctIndex].classList.add("correct"); wrongSet.add(index); }
 
-  document.getElementById("analysis").innerText="解析："+currentList()[index].analysis;
-  document.getElementById("analysis").style.display="block";
+  let correctIndex = 0;
+  if (/^[A-D]$/i.test(ans)) {
+    correctIndex = ans.toUpperCase().charCodeAt(0) - 65;
+  } else {
+    correctIndex = parseInt(ans);
+  }
+
+  const currentIdxInFullList = questions.indexOf(currentList()[index]);
+
+  if (i === correctIndex) {
+    div.classList.add("correct");
+    correctCount++;
+    wrongSet.delete(currentIdxInFullList);
+  } else {
+    div.classList.add("wrong");
+    options[correctIndex].classList.add("correct");
+    wrongSet.add(currentIdxInFullList);
+  }
+
+  document.getElementById("analysis").innerText = "解析：" + currentList()[index].analysis;
+  document.getElementById("analysis").style.display = "block";
   save();
 }
 
-function next(){ index++; save(); render(); }
-function toggleWrong(){ wrongOnly=!wrongOnly; index=0; render(); }
-function resetProgress(){ if(!confirm("确认重置进度？")) return; localStorage.clear(); location.reload(); }
-function save(){
-  localStorage.setItem("index",index);
-  localStorage.setItem("wrong",JSON.stringify([...wrongSet]));
-  localStorage.setItem("correct",correctCount);
-  localStorage.setItem("answered",totalAnswered);
+function next() {
+  index++;
+  save();
+  render();
+}
+
+function toggleWrong() {
+  wrongOnly = !wrongOnly;
+  index = 0;
+  render();
+}
+
+function resetProgress() {
+  if (!confirm("确认重置进度？")) return;
+  localStorage.clear();
+  location.reload();
+}
+
+function save() {
+  localStorage.setItem("index", index);
+  localStorage.setItem("wrong", JSON.stringify([...wrongSet]));
+  localStorage.setItem("correct", correctCount);
+  localStorage.setItem("answered", totalAnswered);
   localStorage.setItem("currentModule", currentModuleFile);
 }
 </script>
