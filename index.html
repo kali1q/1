@@ -3,82 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>刷题 · Web 安全</title>
-
+<title>刷题系统</title>
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont;
-  background: #f5f6fa;
-  margin: 0;
-  padding: 16px;
-}
-.card {
-  max-width: 700px;
-  margin: auto;
-  background: #fff;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.08);
-}
-.header {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 10px;
-}
-.progress {
-  font-size: 13px;
-  color: #888;
-  margin-bottom: 15px;
-}
-.question {
-  font-size: 18px;
-  margin-bottom: 15px;
-}
-.option {
-  padding: 12px;
-  margin: 8px 0;
-  border-radius: 8px;
-  background: #f0f0f0;
-  cursor: pointer;
-}
-.option:hover { background: #e8e8e8; }
-.option.correct { background: #c8f7c5; }
-.option.wrong { background: #f7c5c5; }
-
-.analysis {
-  margin-top: 12px;
-  padding: 10px;
-  background: #f9f9f9;
-  border-left: 4px solid #4caf50;
-  display: none;
-}
-
-.footer {
-  margin-top: 16px;
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-button {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-}
-.next { background: #4caf50; color: #fff; }
-.wrongonly { background: #ff9800; color: #fff; }
-.reset { background: #607d8b; color: #fff; }
-.stats {
-  margin-top: 12px;
-  font-size: 13px;
-  color: #555;
-}
+body { font-family: -apple-system, BlinkMacSystemFont; background: #f5f6fa; margin:0; padding:16px; }
+.card { max-width:700px; margin:auto; background:#fff; padding:20px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.08);}
+.header { font-size:14px; color:#666; margin-bottom:10px;}
+.progress { font-size:13px; color:#888; margin-bottom:15px;}
+.question { font-size:18px; margin-bottom:15px;}
+.option { padding:12px; margin:8px 0; border-radius:8px; background:#f0f0f0; cursor:pointer;}
+.option:hover { background:#e8e8e8;}
+.option.correct { background:#c8f7c5;}
+.option.wrong { background:#f7c5c5;}
+.analysis { margin-top:12px; padding:10px; background:#f9f9f9; border-left:4px solid #4caf50; display:none;}
+.footer { margin-top:16px; display:flex; justify-content:space-between; gap:10px;}
+button { flex:1; padding:10px; border-radius:8px; border:none; cursor:pointer;}
+.next { background:#4caf50; color:#fff;}
+.wrongonly { background:#ff9800; color:#fff;}
+.reset { background:#607d8b; color:#fff;}
+.stats { margin-top:12px; font-size:13px; color:#555;}
+select { margin-bottom:12px; padding:6px; border-radius:6px; }
 </style>
 </head>
-
 <body>
+
 <div class="card">
+  <select id="moduleSelect">
+    <option value="">请选择题库模块</option>
+  </select>
+
   <div class="header" id="meta"></div>
   <div class="progress" id="progress"></div>
   <div class="question" id="question"></div>
@@ -101,8 +53,39 @@ let wrongOnly = false;
 let wrongSet = new Set(JSON.parse(localStorage.getItem("wrong") || "[]"));
 let correctCount = Number(localStorage.getItem("correct")) || 0;
 let totalAnswered = Number(localStorage.getItem("answered")) || 0;
+let currentModuleFile = localStorage.getItem("currentModule") || "";
 
-// 简单 CSV 解析
+// 自动加载 modules.json
+fetch('modules.json')
+  .then(res => res.json())
+  .then(data => {
+    const select = document.getElementById("moduleSelect");
+    data.forEach(mod => {
+      const option = document.createElement("option");
+      option.value = mod.file;
+      option.innerText = mod.name;
+      select.appendChild(option);
+    });
+    if(currentModuleFile) select.value = currentModuleFile;
+    if(currentModuleFile) loadModule(currentModuleFile);
+  });
+
+// 加载模块 CSV
+function loadModule(file) {
+  if(!file) return;
+  currentModuleFile = file;
+  localStorage.setItem("currentModule", file);
+  fetch(file)
+    .then(res => res.text())
+    .then(text => {
+      questions = parseCSV(text);
+      index=0; wrongSet.clear(); correctCount=0; totalAnswered=0;
+      save();
+      render();
+    });
+}
+
+// CSV 解析
 function parseCSV(text) {
   const lines = text.trim().split('\n').slice(1);
   return lines.map(line => {
@@ -119,96 +102,60 @@ function parseCSV(text) {
   });
 }
 
-fetch('web_1750_questions.csv')
-  .then(res => res.text())
-  .then(text => {
-    questions = parseCSV(text);
-    render();
-  });
-
 function currentList() {
-  return wrongOnly
-    ? questions.filter((_, i) => wrongSet.has(i))
-    : questions;
+  return wrongOnly ? questions.filter((_, i) => wrongSet.has(i)) : questions;
 }
 
 function render() {
   const list = currentList();
-  if (list.length === 0) {
+  if(list.length===0){
     document.getElementById("question").innerText = "暂无题目";
     return;
   }
   index = index % list.length;
   const q = list[index];
 
-  document.getElementById("meta").innerText =
-    `${q.module} / ${q.sub} / ${q.diff}`;
-  document.getElementById("progress").innerText =
-    `第 ${index + 1} 题 / 共 ${list.length} 题`;
-
+  document.getElementById("meta").innerText = `${q.module} / ${q.sub} / ${q.diff}`;
+  document.getElementById("progress").innerText = `第 ${index+1} 题 / 共 ${list.length} 题`;
   document.getElementById("question").innerText = q.q;
-  document.getElementById("analysis").style.display = "none";
+  document.getElementById("analysis").style.display="none";
 
   const box = document.getElementById("options");
   box.innerHTML = "";
-  q.opts.forEach((opt, i) => {
+  q.opts.forEach((opt,i)=>{
     const div = document.createElement("div");
-    div.className = "option";
-    div.innerText = opt;
-    div.onclick = () => check(div, i, q.answer);
+    div.className="option";
+    div.innerText=opt;
+    div.onclick = ()=>check(div,i,q.answer);
     box.appendChild(div);
   });
 
   document.getElementById("stats").innerText =
-    `已答：${totalAnswered}，正确：${correctCount}，正确率：${totalAnswered ? Math.round(correctCount/totalAnswered*100) : 0}%`;
+    `已答：${totalAnswered}，正确：${correctCount}，正确率：${totalAnswered?Math.round(correctCount/totalAnswered*100):0}%`;
 }
 
-function check(div, i, ans) {
-  const options = document.querySelectorAll(".option");
-  options.forEach(o => o.onclick = null);
-
-  const correctIndex = ans.charCodeAt(0) - 65;
+function check(div,i,ans){
+  const options=document.querySelectorAll(".option");
+  options.forEach(o=>o.onclick=null);
+  const correctIndex=ans.charCodeAt(0)-65;
   totalAnswered++;
+  if(i===correctIndex){ div.classList.add("correct"); correctCount++; wrongSet.delete(index); }
+  else { div.classList.add("wrong"); options[correctIndex].classList.add("correct"); wrongSet.add(index); }
 
-  if (i === correctIndex) {
-    div.classList.add("correct");
-    correctCount++;
-    wrongSet.delete(index);
-  } else {
-    div.classList.add("wrong");
-    options[correctIndex].classList.add("correct");
-    wrongSet.add(index);
-  }
-
-  document.getElementById("analysis").innerText = "解析：" + currentList()[index].analysis;
-  document.getElementById("analysis").style.display = "block";
-
+  document.getElementById("analysis").innerText="解析："+currentList()[index].analysis;
+  document.getElementById("analysis").style.display="block";
   save();
 }
 
-function next() {
-  index++;
-  save();
-  render();
-}
-
-function toggleWrong() {
-  wrongOnly = !wrongOnly;
-  index = 0;
-  render();
-}
-
-function resetProgress() {
-  if (!confirm("确认重置进度？")) return;
-  localStorage.clear();
-  location.reload();
-}
-
-function save() {
-  localStorage.setItem("index", index);
-  localStorage.setItem("wrong", JSON.stringify([...wrongSet]));
-  localStorage.setItem("correct", correctCount);
-  localStorage.setItem("answered", totalAnswered);
+function next(){ index++; save(); render(); }
+function toggleWrong(){ wrongOnly=!wrongOnly; index=0; render(); }
+function resetProgress(){ if(!confirm("确认重置进度？")) return; localStorage.clear(); location.reload(); }
+function save(){
+  localStorage.setItem("index",index);
+  localStorage.setItem("wrong",JSON.stringify([...wrongSet]));
+  localStorage.setItem("correct",correctCount);
+  localStorage.setItem("answered",totalAnswered);
+  localStorage.setItem("currentModule", currentModuleFile);
 }
 </script>
 </body>
