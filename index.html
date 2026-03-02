@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>本地刷题系统</title>
+<title>刷题系统</title>
 
 <style>
 body{
@@ -19,6 +19,7 @@ h2{margin-bottom:10px}
     margin:8px 0;
     cursor:pointer;
     border-radius:6px;
+    user-select:none;
 }
 .option:hover{background:#f0f0f0}
 .correct{background:#c8f7c5 !important}
@@ -59,9 +60,9 @@ let questions = [];
 let current = 0;
 let randomMode = false;
 let wrongList = [];
+let selectedAnswers = [];
 
 let stats = {
-    total:0,
     correct:0,
     wrong:0
 };
@@ -75,47 +76,62 @@ fetch("题库_整理版.txt")
 });
 
 function parseQuestions(text){
+
     const blocks = text.split(/\n(?=\d+\.)/);
 
-    blocks.forEach(block=>{
-        const lines = block.trim().split("\n");
-        if(lines.length < 2) return;
+    blocks.forEach(block => {
 
-        let title = "";
-        let options = {};
+        let content = block.trim();
+        if(content.length < 5) return;
+
+        // 提取答案（支持 答案：A 或 （A））
         let answer = "";
-
-        for(let line of lines){
-            line = line.trim();
-
-            if(/^\d+\./.test(line)) continue;
-
-            if(/^A\./.test(line)) options.A = line.substring(2).trim();
-            else if(/^B\./.test(line)) options.B = line.substring(2).trim();
-            else if(/^C\./.test(line)) options.C = line.substring(2).trim();
-            else if(/^D\./.test(line)) options.D = line.substring(2).trim();
-            else if(line.startsWith("答案")){
-                const match = line.match(/[A-D]+/);
-                if(match) answer = match[0];
-            }else{
-                title += line + " ";
+        let ansMatch = content.match(/答案[:：]\s*([A-D]+)/);
+        if(ansMatch){
+            answer = ansMatch[1];
+        } else {
+            let bracketMatch = content.match(/（([A-D]+)）/);
+            if(bracketMatch){
+                answer = bracketMatch[1];
             }
         }
+
+        // 提取选项（支持同行 / 分行 / A、 或 A.）
+        let options = {};
+        let optionRegex = /([A-D])[\.\、]\s*(.*?)(?=\s*[A-D][\.\、]\s*|$)/g;
+
+        let match;
+        while((match = optionRegex.exec(content)) !== null){
+            options[match[1]] = match[2].trim();
+        }
+
+        // 删除题号
+        content = content.replace(/^\d+\./,"");
+
+        // 删除选项
+        content = content.replace(optionRegex,"");
+
+        // 删除答案
+        content = content.replace(/答案[:：]\s*[A-D]+/,"");
+        content = content.replace(/（[A-D]+）/,"");
+
+        let title = content.trim();
 
         if(title && Object.keys(options).length > 0){
             questions.push({title, options, answer});
         }
     });
-
-    stats.total = questions.length;
 }
 
 function loadQuestion(){
+
     if(questions.length === 0) return;
 
     if(randomMode){
         current = Math.floor(Math.random() * questions.length);
     }
+
+    selectedAnswers = [];
 
     const q = questions[current];
 
@@ -131,18 +147,40 @@ function loadQuestion(){
         const div = document.createElement("div");
         div.className = "option";
         div.innerText = key + ". " + q.options[key];
-        div.onclick = ()=>checkAnswer(div,key);
+        div.onclick = ()=>selectOption(div,key);
         optionsDiv.appendChild(div);
     }
 
     updateStats();
 }
 
-function checkAnswer(el,selected){
+function selectOption(el,key){
+
+    const q = questions[current];
+
+    if(q.answer.length > 1){
+        // 多选
+        if(selectedAnswers.includes(key)){
+            selectedAnswers = selectedAnswers.filter(k=>k!==key);
+            el.style.background="";
+        } else {
+            selectedAnswers.push(key);
+            el.style.background="#ddd";
+        }
+    } else {
+        // 单选
+        selectedAnswers=[key];
+        checkAnswer();
+    }
+}
+
+function checkAnswer(){
+
     const q = questions[current];
     const correct = q.answer;
 
     const opts = document.querySelectorAll(".option");
+
     opts.forEach(o=>{
         o.onclick=null;
         if(correct.includes(o.innerText[0])){
@@ -150,12 +188,16 @@ function checkAnswer(el,selected){
         }
     });
 
-    if(correct.includes(selected)){
+    if(selectedAnswers.sort().join("") === correct.split("").sort().join("")){
         stats.correct++;
-    }else{
-        el.classList.add("wrong");
+    } else {
         stats.wrong++;
         wrongList.push(current);
+        opts.forEach(o=>{
+            if(selectedAnswers.includes(o.innerText[0]) && !correct.includes(o.innerText[0])){
+                o.classList.add("wrong");
+            }
+        });
     }
 
     saveProgress();
@@ -191,12 +233,12 @@ function showWrong(){
 }
 
 function updateStats(){
-    let rate = stats.total ? 
-        ((stats.correct/(stats.correct+stats.wrong))*100 || 0).toFixed(1)
-        : 0;
+
+    let total = stats.correct + stats.wrong;
+    let rate = total ? ((stats.correct/total)*100).toFixed(1) : 0;
 
     document.getElementById("stats").innerHTML =
-        `已做：${stats.correct+stats.wrong} 题 |
+        `已做：${total} 题 |
          正确：${stats.correct} |
          错误：${stats.wrong} |
          正确率：${rate}%`;
