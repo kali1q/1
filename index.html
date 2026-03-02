@@ -1,231 +1,106 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>刷题系统</title>
+<title>TXT题库刷题系统</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont; background: #f5f6fa; margin:0; padding:16px; }
-.card { max-width:700px; margin:auto; background:#fff; padding:20px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.08);}
-.header { font-size:14px; color:#666; margin-bottom:10px;}
-.progress { font-size:13px; color:#888; margin-bottom:15px;}
-.question { font-size:18px; margin-bottom:15px;}
-.option { padding:12px; margin:8px 0; border-radius:8px; background:#f0f0f0; cursor:pointer;}
-.option:hover { background:#e8e8e8;}
-.option.correct { background:#c8f7c5;}
-.option.wrong { background:#f7c5c5;}
-.analysis { margin-top:12px; padding:10px; background:#f9f9f9; border-left:4px solid #4caf50; display:none;}
-.footer { margin-top:16px; display:flex; justify-content:space-between; gap:10px;}
-button { flex:1; padding:10px; border-radius:8px; border:none; cursor:pointer;}
-.next { background:#4caf50; color:#fff;}
-.wrongonly { background:#ff9800; color:#fff;}
-.reset { background:#607d8b; color:#fff;}
-.stats { margin-top:12px; font-size:13px; color:#555;}
-select { margin-bottom:12px; padding:6px; border-radius:6px; }
+body { max-width:800px;margin:40px auto;font-family:Arial;}
+.option{display:block;border:1px solid #ccc;padding:8px;margin:5px 0;cursor:pointer}
+.correct{background:#c8f7c5}
+.wrong{background:#f7c5c5}
 </style>
 </head>
 <body>
-<div class="card">
-  <select id="moduleSelect">
-    <option value="">请选择题库模块</option>
-  </select>
-  <div class="header" id="meta"></div>
-  <div class="progress" id="progress"></div>
-  <div class="question" id="question"></div>
-  <div id="options"></div>
-  <div class="analysis" id="analysis"></div>
-  <div class="footer">
-    <button class="wrongonly" onclick="toggleWrong()">只刷错题</button>
-    <button class="reset" onclick="resetProgress()">重置</button>
-    <button class="next" onclick="next()">下一题</button>
-  </div>
-  <div class="stats" id="stats"></div>
-</div>
+
+<h2>上传TXT题库</h2>
+<input type="file" id="fileInput" accept=".txt">
+<div id="progress"></div>
+<div id="question"></div>
+<div id="options"></div>
+<button onclick="prev()">上一题</button>
+<button onclick="next()">下一题</button>
 
 <script>
 let questions = [];
-let index = Number(localStorage.getItem("index")) || 0;
-let wrongOnly = false;
-let wrongSet = new Set(JSON.parse(localStorage.getItem("wrong") || "[]"));
-let correctCount = Number(localStorage.getItem("correct")) || 0;
-let totalAnswered = Number(localStorage.getItem("answered")) || 0;
-let currentModuleFile = localStorage.getItem("currentModule") || "";
+let current = 0;
 
-// 自动加载 modules.json
-fetch('modules.json')
-  .then(res => res.json())
-  .then(data => {
-    const select = document.getElementById("moduleSelect");
-    data.forEach(mod => {
-      const option = document.createElement("option");
-      option.value = mod.file;
-      option.innerText = mod.name;
-      select.appendChild(option);
-    });
-    if(currentModuleFile) select.value = currentModuleFile;
-    if(currentModuleFile) loadModule(currentModuleFile);
-
-    // 模块选择切换
-    select.onchange = (e) => loadModule(e.target.value);
-  });
-
-// 加载模块 CSV
-function loadModule(file) {
-  if(!file) return;
-  currentModuleFile = file;
-  localStorage.setItem("currentModule", file);
-  fetch(file)
-    .then(res => res.text())
-    .then(text => {
-      questions = parseCSV(text);
-      index = 0;
-      wrongSet.clear();
-      correctCount = 0;
-      totalAnswered = 0;
-      save();
-      render();
-    });
-}
-
-// 健壮的 CSV 解析函数（支持双引号、字段内逗号、"" 转义、去 BOM）
-function parseCSV(text) {
-  text = text.replace(/^\uFEFF/, ''); // 去掉 BOM
-  const lines = text.trim().split(/\r?\n/);
-  const rows = [];
-
-  function parseLine(line) {
-    const fields = [];
-    let field = '';
-    let inQuotes = false;
-    let i = 0;
-    while (i < line.length) {
-      const char = line[i];
-      if (char === '"') {
-        if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-          field += '"'; // 转义的双引号
-          i += 2;
-          continue;
-        }
-        inQuotes = !inQuotes; // 切换引号状态
-        i++;
-      } else if (char === ',' && !inQuotes) {
-        fields.push(field.trim());
-        field = '';
-        i++;
-      } else {
-        field += char;
-        i++;
-      }
+document.getElementById("fileInput").addEventListener("change", function(e){
+    const reader = new FileReader();
+    reader.onload = function(){
+        parseQuestions(this.result);
+        loadQuestion();
     }
-    fields.push(field.trim()); // 最后一个字段
-    return fields;
-  }
+    reader.readAsText(e.target.files[0], "utf-8");
+});
 
-  for (let i = 1; i < lines.length; i++) { // 跳过标题行
-    const arr = parseLine(lines[i]);
-    if (arr.length < 10) continue; // 少于10列忽略
-    rows.push({
-      module: arr[0],
-      sub: arr[1],
-      diff: arr[2],
-      q: arr[3],
-      opts: arr.slice(4, 8),
-      answer: arr[8],
-      analysis: arr[9]
+function parseQuestions(text){
+    const blocks = text.split(/\n(?=\d+、)/);  // 按题号分块
+    questions = [];
+
+    blocks.forEach(block=>{
+        const match = block.match(/(\d+)、([\s\S]*?)（([A-D])）[\s\S]*?A、([\s\S]*?)\nB、([\s\S]*?)\nC、([\s\S]*?)\nD、([\s\S]*)/);
+        if(match){
+            questions.push({
+                title: match[2].trim(),
+                options:{
+                    A: match[4].trim(),
+                    B: match[5].trim(),
+                    C: match[6].trim(),
+                    D: match[7].trim()
+                },
+                answer: match[3]
+            });
+        }
     });
-  }
-  return rows;
 }
 
-function currentList() {
-  return wrongOnly ? questions.filter((_, i) => wrongSet.has(i)) : questions;
+function loadQuestion(){
+    if(questions.length==0) return;
+    const q = questions[current];
+    document.getElementById("progress").innerText =
+        `第 ${current+1} 题 / 共 ${questions.length} 题`;
+    document.getElementById("question").innerText = q.title;
+
+    const optionsDiv = document.getElementById("options");
+    optionsDiv.innerHTML="";
+
+    for(let key in q.options){
+        const div = document.createElement("div");
+        div.className="option";
+        div.innerText = key+"、"+q.options[key];
+        div.onclick=()=>check(div,key);
+        optionsDiv.appendChild(div);
+    }
 }
 
-function render() {
-  const list = currentList();
-  if (list.length === 0) {
-    document.getElementById("question").innerText = "暂无题目";
-    document.getElementById("options").innerHTML = "";
-    document.getElementById("progress").innerText = "";
-    document.getElementById("meta").innerText = "";
-    return;
-  }
-  index = index % list.length;
-  const q = list[index];
-  document.getElementById("meta").innerText = `${q.module} / ${q.sub} / ${q.diff}`;
-  document.getElementById("progress").innerText = `第 ${index + 1} 题 / 共 ${list.length} 题`;
-  document.getElementById("question").innerText = q.q;
-  document.getElementById("analysis").style.display = "none";
-
-  const box = document.getElementById("options");
-  box.innerHTML = "";
-  q.opts.forEach((opt, i) => {
-    const div = document.createElement("div");
-    div.className = "option";
-    div.innerText = opt;
-    div.onclick = () => check(div, i, q.answer);
-    box.appendChild(div);
-  });
-
-  document.getElementById("stats").innerText =
-    `已答：${totalAnswered}，正确：${correctCount}，正确率：${totalAnswered ? Math.round(correctCount / totalAnswered * 100) : 0}%`;
+function check(el,selected){
+    const correct = questions[current].answer;
+    const opts = document.querySelectorAll(".option");
+    opts.forEach(o=>{
+        o.onclick=null;
+        if(o.innerText.startsWith(correct)){
+            o.classList.add("correct");
+        }
+    });
+    if(selected!==correct){
+        el.classList.add("wrong");
+    }
 }
 
-// 改进的答案检查函数（支持 A/B/C/D 或 0/1/2/3）
-function check(div, i, ans) {
-  const options = document.querySelectorAll(".option");
-  options.forEach(o => o.onclick = null);
-  totalAnswered++;
-
-  let correctIndex = 0;
-  if (/^[A-D]$/i.test(ans)) {
-    correctIndex = ans.toUpperCase().charCodeAt(0) - 65;
-  } else {
-    correctIndex = parseInt(ans);
-  }
-
-  const currentIdxInFullList = questions.indexOf(currentList()[index]);
-
-  if (i === correctIndex) {
-    div.classList.add("correct");
-    correctCount++;
-    wrongSet.delete(currentIdxInFullList);
-  } else {
-    div.classList.add("wrong");
-    options[correctIndex].classList.add("correct");
-    wrongSet.add(currentIdxInFullList);
-  }
-
-  document.getElementById("analysis").innerText = "解析：" + currentList()[index].analysis;
-  document.getElementById("analysis").style.display = "block";
-  save();
+function next(){
+    if(current<questions.length-1){
+        current++;
+        loadQuestion();
+    }
 }
 
-function next() {
-  index++;
-  save();
-  render();
-}
-
-function toggleWrong() {
-  wrongOnly = !wrongOnly;
-  index = 0;
-  render();
-}
-
-function resetProgress() {
-  if (!confirm("确认重置进度？")) return;
-  localStorage.clear();
-  location.reload();
-}
-
-function save() {
-  localStorage.setItem("index", index);
-  localStorage.setItem("wrong", JSON.stringify([...wrongSet]));
-  localStorage.setItem("correct", correctCount);
-  localStorage.setItem("answered", totalAnswered);
-  localStorage.setItem("currentModule", currentModuleFile);
+function prev(){
+    if(current>0){
+        current--;
+        loadQuestion();
+    }
 }
 </script>
+
 </body>
 </html>
