@@ -1,101 +1,96 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>本地TXT刷题系统</title>
-<style>
-body{max-width:800px;margin:40px auto;font-family:Arial}
-.option{display:block;border:1px solid #ccc;padding:8px;margin:6px 0;cursor:pointer}
-.option:hover{background:#eee}
-.correct{background:#c8f7c5}
-.wrong{background:#f7c5c5}
-</style>
-</head>
-<body>
-
-<h2>单项选择题</h2>
-<div id="progress"></div>
-<div id="question"></div>
-<div id="options"></div>
-<button onclick="prev()">上一题</button>
-<button onclick="next()">下一题</button>
-
 <script>
-let questions=[];
-let current=0;
+let questions = [];
+let current = 0;
 
-fetch("questions.txt")
-.then(res=>res.text())
-.then(text=>{
+fetch("题库_整理版.txt")
+.then(res => res.text())
+.then(text => {
     parseQuestions(text);
     loadQuestion();
 });
 
-function parseQuestions(text){
-    const blocks=text.split(/\n(?=\d+、)/);
-    blocks.forEach(block=>{
-        const match=block.match(/(\d+)、([\s\S]*?)（([A-D])）[\s\S]*?A、([\s\S]*?)\nB、([\s\S]*?)\nC、([\s\S]*?)\nD、([\s\S]*)/);
-        if(match){
-            questions.push({
-                title:match[2].trim(),
-                options:{
-                    A:match[4].trim(),
-                    B:match[5].trim(),
-                    C:match[6].trim(),
-                    D:match[7].trim()
-                },
-                answer:match[3]
-            });
+function parseQuestions(text) {
+    const blocks = text.split(/\n(?=\d+\.)/);
+
+    blocks.forEach(block => {
+        const lines = block.trim().split("\n");
+        if (lines.length < 2) return;
+
+        let title = "";
+        let options = {};
+        let answer = "";
+
+        for (let line of lines) {
+            line = line.trim();
+
+            if (/^\d+\./.test(line)) continue;
+
+            if (/^A\./.test(line)) options.A = line.substring(2).trim();
+            else if (/^B\./.test(line)) options.B = line.substring(2).trim();
+            else if (/^C\./.test(line)) options.C = line.substring(2).trim();
+            else if (/^D\./.test(line)) options.D = line.substring(2).trim();
+            else if (line.startsWith("答案")) {
+                const match = line.match(/[A-D]+/);
+                if (match) answer = match[0];
+            }
+            else {
+                title += line + " ";
+            }
+        }
+
+        if (title && Object.keys(options).length > 0) {
+            questions.push({ title, options, answer });
         }
     });
 }
 
-function loadQuestion(){
-    if(questions.length===0) return;
-    const q=questions[current];
-    document.getElementById("progress").innerText=
-        `第 ${current+1} 题 / 共 ${questions.length} 题`;
-    document.getElementById("question").innerText=q.title;
+function loadQuestion() {
+    if (questions.length === 0) return;
 
-    const optionsDiv=document.getElementById("options");
-    optionsDiv.innerHTML="";
-    for(let key in q.options){
-        const div=document.createElement("div");
-        div.className="option";
-        div.innerText=key+"、"+q.options[key];
-        div.onclick=()=>check(div,key);
+    const q = questions[current];
+    document.getElementById("question").innerText = q.title;
+    document.getElementById("progress").innerText =
+        `第 ${current + 1} 题 / 共 ${questions.length} 题`;
+
+    const optionsDiv = document.getElementById("options");
+    optionsDiv.innerHTML = "";
+
+    for (let key in q.options) {
+        const div = document.createElement("div");
+        div.className = "option";
+        div.innerText = key + ". " + q.options[key];
+        div.onclick = () => checkAnswer(div, key);
         optionsDiv.appendChild(div);
     }
 }
 
-function check(el,selected){
-    const correct=questions[current].answer;
-    const opts=document.querySelectorAll(".option");
-    opts.forEach(o=>{
-        o.onclick=null;
-        if(o.innerText.startsWith(correct)){
+function checkAnswer(el, selected) {
+    const correct = questions[current].answer;
+    const opts = document.querySelectorAll(".option");
+
+    opts.forEach(o => {
+        o.onclick = null;
+        if (o.innerText.startsWith(correct)) {
             o.classList.add("correct");
         }
     });
-    if(selected!==correct){
+
+    if (selected !== correct) {
         el.classList.add("wrong");
     }
 }
 
-function next(){
-    if(current<questions.length-1){
+function next() {
+    if (current < questions.length - 1) {
         current++;
         loadQuestion();
     }
 }
 
-function prev(){
-    if(current>0){
+function prev() {
+    if (current > 0) {
         current--;
         loadQuestion();
     }
 }
 </script>
-
-</body>
-</html>
