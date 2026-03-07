@@ -1,111 +1,51 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html>
+
 <head>
-    <meta charset="UTF-8">
-    <title>NISP 刷题网页</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; }
-        #question { font-size: 18px; margin-bottom: 20px; }
-        .option { margin-bottom: 10px; }
-        #feedback { color: green; font-weight: bold; margin-top: 10px; }
-        #nextBtn { margin-top: 20px; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
-        #nextBtn:disabled { background: gray; }
-    </style>
-    <!-- 替换为你的路径，如果用 unpkg 尝试 https://unpkg.com/officeparser@latest/dist/officeparser.browser.js (如果可用，否则下载本地) -->
-    <script src="js/officeparser.browser.js"></script>
+
+<meta charset="UTF-8">
+<title>刷题系统</title>
+
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
+<style>
+
+body{
+font-family:Arial;
+max-width:900px;
+margin:auto;
+padding:20px;
+}
+
+.option{
+border:1px solid #ddd;
+padding:10px;
+margin:10px 0;
+cursor:pointer;
+}
+
+.correct{
+background:#b8f5b8;
+}
+
+.wrong{
+background:#f5b8b8;
+}
+
+</style>
+
 </head>
+
 <body>
-    <h1>NISP 全国题库刷题</h1>
-    <div id="question"></div>
-    <div id="options"></div>
-    <button id="submitBtn">提交答案</button>
-    <div id="feedback"></div>
-    <button id="nextBtn" disabled>下一题</button>
 
-    <script>
-        let questions = []; // 存储提取的题库: [{question: '问题文本', options: ['A. ...', 'B. ...', ...], answer: 'D'}]
-        let currentIndex = 0;
+<h2>在线刷题</h2>
 
-        // 提取 quiz 的函数（基于 AST 结构遍历）
-        function extractQuiz(ast) {
-            const content = ast.content;
-            let currentQuestion = '';
-            let currentOptions = [];
-            let currentAnswer = '';
-            let inQuestion = false;
+<div id="quiz"></div>
 
-            content.forEach(node => {
-                if (node.type === 'paragraph') {
-                    const text = node.text.trim();
-                    if (/^\d+\s/.test(text)) { // 以数字开头，如 "1 以..."
-                        if (inQuestion && currentQuestion && currentOptions.length && currentAnswer) {
-                            questions.push({ question: currentQuestion, options: currentOptions, answer: currentAnswer });
-                        }
-                        currentQuestion = text;
-                        currentOptions = [];
-                        currentAnswer = '';
-                        inQuestion = true;
-                    } else if (inQuestion && /^[A-D]\./.test(text)) { // 选项如 "A. 选项"
-                        currentOptions.push(text);
-                    } else if (inQuestion && text.startsWith('正确答案：')) { // 如 "正确答案： D"
-                        currentAnswer = text.split('：')[1].trim()[0]; // 取 'D'
-                        inQuestion = false;
-                    }
-                }
-                // 递归处理子节点（如果有嵌套）
-                if (node.children) {
-                    // 类似遍历，但简化假设无深嵌套
-                }
-            });
-            // 推入最后一题
-            if (currentQuestion && currentOptions.length && currentAnswer) {
-                questions.push({ question: currentQuestion, options: currentOptions, answer: currentAnswer });
-            }
-            console.log('提取到的问题数：', questions.length);
-            showQuestion();
-        }
+<button onclick="next()">下一题</button>
 
-        // 显示当前题
-        function showQuestion() {
-            if (questions.length === 0) return;
-            const q = questions[currentIndex];
-            document.getElementById('question').innerHTML = q.question;
-            const optionsDiv = document.getElementById('options');
-            optionsDiv.innerHTML = '';
-            q.options.forEach((opt, i) => {
-                const label = document.createElement('label');
-                label.className = 'option';
-                label.innerHTML = `<input type="radio" name="choice" value="${String.fromCharCode(65 + i)}"> ${opt}`;
-                optionsDiv.appendChild(label);
-            });
-            document.getElementById('submitBtn').disabled = false;
-            document.getElementById('nextBtn').disabled = true;
-            document.getElementById('feedback').innerHTML = '';
-        }
+<script src="script.js"></script>
 
-        // 检查答案
-        document.getElementById('submitBtn').addEventListener('click', () => {
-            const selected = document.querySelector('input[name="choice"]:checked');
-            if (!selected) return alert('请选择一个选项');
-            const userAnswer = selected.value;
-            const correct = questions[currentIndex].answer;
-            document.getElementById('feedback').innerHTML = userAnswer === correct ? '正确！' : `错误，正确答案是 ${correct}`;
-            document.getElementById('submitBtn').disabled = true;
-            document.getElementById('nextBtn').disabled = false;
-        });
-
-        // 下一题
-        document.getElementById('nextBtn').addEventListener('click', () => {
-            currentIndex = (currentIndex + 1) % questions.length;
-            showQuestion();
-        });
-
-        // 加载并解析 DOCX
-        fetch('nisp.docx')
-            .then(response => response.arrayBuffer())
-            .then(buffer => officeParser.parseOffice(buffer))
-            .then(ast => extractQuiz(ast))
-            .catch(error => console.error('解析错误：', error));
-    </script>
 </body>
+
 </html>
