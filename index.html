@@ -1,65 +1,34 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-
 <meta charset="UTF-8">
 <title>在线刷题</title>
 
-<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js"></script>
 
 <style>
-
-body{
-font-family:Arial;
-background:#f4f6f9;
-}
-
+body{font-family:Arial;background:#f3f4f6}
 .container{
-max-width:900px;
-margin:40px auto;
+width:720px;
+margin:80px auto;
 background:white;
-padding:30px;
-border-radius:10px;
-box-shadow:0 5px 15px rgba(0,0,0,0.1);
+padding:40px;
+border-radius:12px;
+box-shadow:0 4px 20px rgba(0,0,0,0.08)
 }
-
-h1{
-text-align:center;
-}
-
-#progress{
-margin-bottom:20px;
-color:#666;
-}
-
+h1{text-align:center}
 .option{
 border:1px solid #ddd;
 padding:12px;
 margin:10px 0;
-cursor:pointer;
 border-radius:6px;
+cursor:pointer
 }
-
-.option:hover{
-background:#f0f0f0;
-}
-
-.correct{
-background:#c8f7c5;
-}
-
-.wrong{
-background:#f7c5c5;
-}
-
-button{
-margin-top:15px;
-padding:8px 15px;
-cursor:pointer;
-}
-
+.option:hover{background:#f5f5f5}
+.correct{background:#b7e4b7}
+.wrong{background:#f3b2b2}
+button{margin-top:20px;padding:8px 16px}
 </style>
-
 </head>
 
 <body>
@@ -69,135 +38,129 @@ cursor:pointer;
 <h1>在线刷题</h1>
 
 <div id="progress"></div>
+<h3 id="question">题库加载中...</h3>
+<div id="options"></div>
 
-<div id="quiz"></div>
-
-<button onclick="next()">下一题</button>
+<button onclick="nextQuestion()">下一题</button>
 
 </div>
 
 <script>
 
 let questions=[]
-let index=0
+let current=0
 
 fetch("nisp.docx")
 .then(res=>res.arrayBuffer())
-.then(buffer=>{
-
-mammoth.extractRawText({arrayBuffer:buffer})
+.then(arrayBuffer=>{
+return mammoth.extractRawText({arrayBuffer:arrayBuffer})
+})
 .then(result=>{
-
 parseQuestions(result.value)
-
-show()
-
 })
 
-})
+function clean(text){
+return text
+.replace(/你的答案是.*?分/g,"")
+.replace(/展开解析/g,"")
+.replace(/^[A-D]\s*/,"")
+.trim()
+}
 
 function parseQuestions(text){
 
-let blocks=text.split("正确答案是")
+let lines=text.split("\n").map(v=>v.trim()).filter(v=>v)
 
-blocks.forEach(b=>{
+let q=null
 
-let title=b.match(/(.*)A、/s)
+lines.forEach(line=>{
 
-if(!title) return
+line=clean(line)
 
-let A=b.match(/A、(.*)/)
-let B=b.match(/B、(.*)/)
-let C=b.match(/C、(.*)/)
-let D=b.match(/D、(.*)/)
+if(line.match(/^\d+/)){
 
-let ans=b.match(/：([A-D])/)
+if(q)questions.push(q)
 
-if(!ans) return
+q={
+question:line.replace(/^\d+/,""),
+options:[],
+answer:0
+}
 
-questions.push({
+}else if(line.match(/^[A-D]/)){
 
-question:title[1].trim(),
+q.options.push(line.replace(/^[A-D][\.、]/,""))
 
-A:A?A[1].trim():"",
-B:B?B[1].trim():"",
-C:C?C[1].trim():"",
-D:D?D[1].trim():"",
+}else if(line.includes("答案")){
 
-answer:ans[1]
-
-})
-
-})
+let a=line.replace(/[^A-D]/g,"")
+q.answer=a.charCodeAt(0)-65
 
 }
 
-function show(){
+})
 
-let q=questions[index]
+if(q)questions.push(q)
 
-document.getElementById("progress").innerHTML=
-"第 "+(index+1)+" 题 / 共 "+questions.length+" 题"
+showQuestion()
 
-let html=`
+}
 
-<h3>${q.question}</h3>
+function showQuestion(){
 
-<div class="option" onclick="check('A',this)">A、${q.A}</div>
-<div class="option" onclick="check('B',this)">B、${q.B}</div>
-<div class="option" onclick="check('C',this)">C、${q.C}</div>
-<div class="option" onclick="check('D',this)">D、${q.D}</div>
+let q=questions[current]
 
+document.getElementById("progress").innerText=
+"第 "+(current+1)+" 题 / 共 "+questions.length+" 题"
+
+document.getElementById("question").innerText=q.question
+
+let html=""
+
+q.options.forEach((opt,i)=>{
+
+html+=`
+<div class="option" onclick="choose(${i})">
+${String.fromCharCode(65+i)}. ${opt}
+</div>
 `
 
-document.getElementById("quiz").innerHTML=html
+})
+
+document.getElementById("options").innerHTML=html
 
 }
 
-function check(ans,el){
+function choose(i){
 
-let q=questions[index]
-
+let q=questions[current]
 let options=document.querySelectorAll(".option")
 
-options.forEach(o=>o.onclick=null)
+if(i===q.answer){
 
-if(ans==q.answer){
+options[i].classList.add("correct")
 
-el.classList.add("correct")
-
-setTimeout(()=>{
-
-next()
-
-},500)
+setTimeout(()=>{nextQuestion()},600)
 
 }else{
 
-el.classList.add("wrong")
-
-options.forEach(o=>{
-if(o.innerText.startsWith(q.answer)){
-o.classList.add("correct")
-}
-})
+options[i].classList.add("wrong")
+options[q.answer].classList.add("correct")
 
 }
 
 }
 
-function next(){
+function nextQuestion(){
 
-index++
+current++
 
-if(index>=questions.length){
-
-document.getElementById("quiz").innerHTML="<h2>全部做完 🎉</h2>"
-return
-
+if(current>=questions.length){
+alert("题做完了")
+current=0
 }
 
-show()
+showQuestion()
 
 }
 
