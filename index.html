@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html>
-
 <head>
 
 <meta charset="UTF-8">
-<title>刷题系统</title>
+<title>在线刷题</title>
 
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
@@ -12,24 +11,57 @@
 
 body{
 font-family:Arial;
+background:#f4f6f9;
+margin:0;
+}
+
+.container{
 max-width:900px;
-margin:auto;
-padding:20px;
+margin:40px auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+h1{
+text-align:center;
+}
+
+#progress{
+margin-bottom:10px;
+color:#666;
+}
+
+#stats{
+margin-bottom:20px;
+color:#444;
 }
 
 .option{
 border:1px solid #ddd;
-padding:10px;
+padding:12px;
 margin:10px 0;
 cursor:pointer;
+border-radius:6px;
+transition:0.2s;
+}
+
+.option:hover{
+background:#f0f0f0;
 }
 
 .correct{
-background:#b8f5b8;
+background:#c8f7c5;
 }
 
 .wrong{
-background:#f5b8b8;
+background:#f7c5c5;
+}
+
+button{
+margin-top:10px;
+padding:8px 15px;
 }
 
 </style>
@@ -38,14 +70,168 @@ background:#f5b8b8;
 
 <body>
 
-<h2>在线刷题</h2>
+<div class="container">
+
+<h1>在线刷题</h1>
+
+<div id="progress"></div>
+<div id="stats"></div>
 
 <div id="quiz"></div>
 
-<button onclick="next()">下一题</button>
+<button onclick="showWrong()">查看错题</button>
 
-<script src="script.js"></script>
+</div>
+
+<script>
+
+let questions=[]
+let index=localStorage.getItem("index")?parseInt(localStorage.getItem("index")):0
+let correct=localStorage.getItem("correct")?parseInt(localStorage.getItem("correct")):0
+let wrong=JSON.parse(localStorage.getItem("wrong")||"[]")
+
+fetch("nisp.docx")
+.then(res=>res.arrayBuffer())
+.then(buffer=>{
+
+mammoth.extractRawText({arrayBuffer:buffer})
+.then(result=>{
+
+parseQuestions(result.value)
+
+show()
+
+})
+
+})
+
+function parseQuestions(text){
+
+let blocks=text.split("正确答案是")
+
+blocks.forEach(b=>{
+
+let title=b.match(/(.*)A、/s)
+if(!title) return
+
+let A=b.match(/A、(.*)/)
+let B=b.match(/B、(.*)/)
+let C=b.match(/C、(.*)/)
+let D=b.match(/D、(.*)/)
+
+let ans=b.match(/：([A-D])/)
+if(!ans) return
+
+questions.push({
+
+question:title[1].trim(),
+
+A:A?A[1].trim():"",
+B:B?B[1].trim():"",
+C:C?C[1].trim():"",
+D:D?D[1].trim():"",
+
+answer:ans[1]
+
+})
+
+})
+
+}
+
+function show(){
+
+let q=questions[index]
+
+document.getElementById("progress").innerHTML=
+"第 "+(index+1)+" 题 / 共 "+questions.length+" 题"
+
+let accuracy=correct+wrong.length==0?0:
+((correct/(correct+wrong.length))*100).toFixed(1)
+
+document.getElementById("stats").innerHTML=
+"正确："+correct+" | 错误："+wrong.length+" | 正确率："+accuracy+"%"
+
+let html=`
+
+<h3>${q.question}</h3>
+
+<div class="option" onclick="check('A',this)">A、${q.A}</div>
+<div class="option" onclick="check('B',this)">B、${q.B}</div>
+<div class="option" onclick="check('C',this)">C、${q.C}</div>
+<div class="option" onclick="check('D',this)">D、${q.D}</div>
+
+`
+
+document.getElementById("quiz").innerHTML=html
+
+}
+
+function check(ans,el){
+
+let q=questions[index]
+
+let options=document.querySelectorAll(".option")
+options.forEach(o=>o.onclick=null)
+
+if(ans==q.answer){
+
+el.classList.add("correct")
+correct++
+
+localStorage.setItem("correct",correct)
+
+setTimeout(()=>{
+
+index++
+localStorage.setItem("index",index)
+
+if(index>=questions.length){
+
+document.getElementById("quiz").innerHTML="<h2>全部做完 🎉</h2>"
+return
+
+}
+
+show()
+
+},500)
+
+}else{
+
+el.classList.add("wrong")
+
+options.forEach(o=>{
+if(o.innerText.startsWith(q.answer)){
+o.classList.add("correct")
+}
+})
+
+wrong.push(q)
+localStorage.setItem("wrong",JSON.stringify(wrong))
+
+}
+
+}
+
+function showWrong(){
+
+if(wrong.length==0){
+
+alert("暂无错题")
+
+return
+
+}
+
+questions=wrong
+index=0
+
+show()
+
+}
+
+</script>
 
 </body>
-
 </html>
