@@ -12,7 +12,6 @@
 body{
 font-family:Arial;
 background:#f4f6f9;
-margin:0;
 }
 
 .container{
@@ -29,13 +28,8 @@ text-align:center;
 }
 
 #progress{
-margin-bottom:10px;
-color:#666;
-}
-
-#stats{
 margin-bottom:20px;
-color:#444;
+color:#666;
 }
 
 .option{
@@ -44,7 +38,6 @@ padding:12px;
 margin:10px 0;
 cursor:pointer;
 border-radius:6px;
-transition:0.2s;
 }
 
 .option:hover{
@@ -60,8 +53,9 @@ background:#f7c5c5;
 }
 
 button{
-margin-top:10px;
+margin-top:15px;
 padding:8px 15px;
+cursor:pointer;
 }
 
 </style>
@@ -75,20 +69,17 @@ padding:8px 15px;
 <h1>在线刷题</h1>
 
 <div id="progress"></div>
-<div id="stats"></div>
 
 <div id="quiz"></div>
 
-<button onclick="showWrong()">查看错题</button>
+<button onclick="next()">下一题</button>
 
 </div>
 
 <script>
 
 let questions=[]
-let index=localStorage.getItem("index")?parseInt(localStorage.getItem("index")):0
-let correct=localStorage.getItem("correct")?parseInt(localStorage.getItem("correct")):0
-let wrong=JSON.parse(localStorage.getItem("wrong")||"[]")
+let index=0
 
 fetch("nisp.docx")
 .then(res=>res.arrayBuffer())
@@ -112,6 +103,7 @@ let blocks=text.split("正确答案是")
 blocks.forEach(b=>{
 
 let title=b.match(/(.*)A、/s)
+
 if(!title) return
 
 let A=b.match(/A、(.*)/)
@@ -120,6 +112,7 @@ let C=b.match(/C、(.*)/)
 let D=b.match(/D、(.*)/)
 
 let ans=b.match(/：([A-D])/)
+
 if(!ans) return
 
 questions.push({
@@ -146,12 +139,6 @@ let q=questions[index]
 document.getElementById("progress").innerHTML=
 "第 "+(index+1)+" 题 / 共 "+questions.length+" 题"
 
-let accuracy=correct+wrong.length==0?0:
-((correct/(correct+wrong.length))*100).toFixed(1)
-
-document.getElementById("stats").innerHTML=
-"正确："+correct+" | 错误："+wrong.length+" | 正确率："+accuracy+"%"
-
 let html=`
 
 <h3>${q.question}</h3>
@@ -172,28 +159,16 @@ function check(ans,el){
 let q=questions[index]
 
 let options=document.querySelectorAll(".option")
+
 options.forEach(o=>o.onclick=null)
 
 if(ans==q.answer){
 
 el.classList.add("correct")
-correct++
-
-localStorage.setItem("correct",correct)
 
 setTimeout(()=>{
 
-index++
-localStorage.setItem("index",index)
-
-if(index>=questions.length){
-
-document.getElementById("quiz").innerHTML="<h2>全部做完 🎉</h2>"
-return
-
-}
-
-show()
+next()
 
 },500)
 
@@ -207,25 +182,20 @@ o.classList.add("correct")
 }
 })
 
-wrong.push(q)
-localStorage.setItem("wrong",JSON.stringify(wrong))
-
 }
 
 }
 
-function showWrong(){
+function next(){
 
-if(wrong.length==0){
+index++
 
-alert("暂无错题")
+if(index>=questions.length){
 
+document.getElementById("quiz").innerHTML="<h2>全部做完 🎉</h2>"
 return
 
 }
-
-questions=wrong
-index=0
 
 show()
 
